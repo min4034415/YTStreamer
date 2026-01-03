@@ -77,6 +77,17 @@ struct ContentView: View {
                     Text("Downloading...")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                } else if streamManager.status == .error {
+                    Text(streamManager.status.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    if let error = streamManager.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                 } else {
                     Text(streamManager.status.rawValue)
                         .font(.caption)
