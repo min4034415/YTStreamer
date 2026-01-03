@@ -173,6 +173,12 @@ class StreamManager: ObservableObject {
 
         var updatedTrack = track
         updatedTrack.status = .downloading
+        
+        // Update UI immediately with new track info
+        DispatchQueue.main.async {
+            self.currentTrack = updatedTrack
+            self.objectWillChange.send()
+        }
 
         currentProcess = downloader.download(
             url: track.youtubeURL,
