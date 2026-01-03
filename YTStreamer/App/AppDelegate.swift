@@ -14,8 +14,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupPopover()
 
-        // Hide dock icon (menu bar app)
-        NSApp.setActivationPolicy(.accessory)
+        // Show in dock for visibility (can hide again later if needed)
+        // NSApp.setActivationPolicy(.accessory)
         
         // Auto-show main window on first launch for better visibility
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
