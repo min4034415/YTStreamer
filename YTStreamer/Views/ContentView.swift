@@ -83,21 +83,42 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Stream URL
-                if let streamURL = streamManager.streamURL {
-                    HStack {
-                        Text(streamURL)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundColor(.blue)
-                            .textSelection(.enabled)
-                        
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(streamURL, forType: .string)
+                // Stream URL Box - Always visible
+                VStack(spacing: 8) {
+                    Text("Stream URL")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    if let streamURL = streamManager.streamURL {
+                        HStack {
+                            Text(streamURL)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(.blue)
+                                .textSelection(.enabled)
+                            
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(streamURL, forType: .string)
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.bordered)
+                        
+                        Text("Open this URL on any device in your network")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Not streaming yet")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        
+                        Text("Add a YouTube URL below to start streaming")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(12)
                 
                 Spacer()
                 
