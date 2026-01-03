@@ -24,15 +24,41 @@ class ProcessRunner {
             process.currentDirectoryURL = URL(fileURLWithPath: workDir)
         }
 
+        // Collect output and error data asynchronously to avoid deadlocks
+        var outputData = Data()
+        var errorData = Data()
+        
+        let outputQueue = DispatchQueue(label: "output.queue")
+        let errorQueue = DispatchQueue(label: "error.queue")
+        
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            outputQueue.sync { outputData.append(data) }
+        }
+        
+        errorPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            errorQueue.sync { errorData.append(data) }
+        }
+
         do {
             try process.run()
             process.waitUntilExit()
         } catch {
             return Result(output: "", error: error.localizedDescription, exitCode: -1)
         }
-
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        
+        // Clean up handlers
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
+        
+        // Read any remaining data
+        outputQueue.sync {
+            outputData.append(outputPipe.fileHandleForReading.readDataToEndOfFile())
+        }
+        errorQueue.sync {
+            errorData.append(errorPipe.fileHandleForReading.readDataToEndOfFile())
+        }
 
         let output = String(data: outputData, encoding: .utf8) ?? ""
         let errorOutput = String(data: errorData, encoding: .utf8) ?? ""

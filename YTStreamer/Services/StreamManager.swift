@@ -39,29 +39,46 @@ class StreamManager: ObservableObject {
 
     /// Add a YouTube URL to the queue and start processing
     func addAndPlay(url: String) {
+        print("📥 addAndPlay called with URL: \(url)")
+        
         var track = Track(youtubeURL: url)
         trackQueue.add(track)
 
-        status = .fetchingMetadata
-        errorMessage = nil
+        DispatchQueue.main.async {
+            self.status = .fetchingMetadata
+            self.errorMessage = nil
+            print("📥 Status set to fetchingMetadata")
+        }
 
         // Fetch metadata first
         downloader.fetchMetadata(for: url) { [weak self] result in
             guard let self = self else { return }
+            
+            print("📥 Metadata fetch completed")
 
             switch result {
             case .success(let metadata):
+                print("📥 Metadata success: \(metadata.title)")
                 track.title = metadata.title
                 track.artist = metadata.artist
                 track.thumbnailURL = metadata.thumbnailURL
                 track.duration = metadata.duration
                 self.trackQueue.update(track)
-                self.currentTrack = track
+                
+                DispatchQueue.main.async {
+                    self.currentTrack = track
+                    self.objectWillChange.send()
+                }
+                
                 self.startDownload(track: track)
 
             case .failure(let error):
-                self.status = .error
-                self.errorMessage = error.localizedDescription
+                print("📥 Metadata error: \(error)")
+                DispatchQueue.main.async {
+                    self.status = .error
+                    self.errorMessage = error.localizedDescription
+                    self.objectWillChange.send()
+                }
             }
         }
     }
