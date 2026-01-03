@@ -6,25 +6,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Properties
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
-    private var mainWindowController: MainWindowController?
+    private var mainWindow: NSWindow!
     private let streamManager = StreamManager.shared
 
     // MARK: - App Lifecycle
     func applicationDidFinishLaunching(_ notification: Notification) {
+        print("App launched!")
+        
         setupMenuBar()
         setupPopover()
-
-        // Show in dock for visibility (can hide again later if needed)
-        // NSApp.setActivationPolicy(.accessory)
-        
-        // Auto-show main window on first launch for better visibility
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.showMainWindow()
-        }
+        createAndShowMainWindow()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         streamManager.stopServer()
+    }
+    
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            mainWindow?.makeKeyAndOrderFront(nil)
+        }
+        return true
+    }
+
+    // MARK: - Window Setup
+    private func createAndShowMainWindow() {
+        print("Creating main window...")
+        
+        mainWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        mainWindow.title = "YT Streamer"
+        mainWindow.isReleasedWhenClosed = false
+        mainWindow.setFrameAutosaveName("")  // Disable state restoration
+        mainWindow.contentViewController = MainViewController()
+        mainWindow.center()
+        mainWindow.makeKeyAndOrderFront(nil)
+        mainWindow.orderFrontRegardless()  // Force to front even if app isn't active
+        
+        NSApp.activate(ignoringOtherApps: true)
+        
+        print("Window should be visible now!")
     }
 
     // MARK: - Menu Bar Setup
@@ -32,11 +57,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            // Try SF Symbol first, fallback to text
             if let image = NSImage(systemSymbolName: "music.note.house", accessibilityDescription: "YT Streamer") {
                 button.image = image
             } else {
-                // Fallback for older macOS versions
                 button.title = "♪"
             }
             button.action = #selector(togglePopover)
@@ -64,12 +87,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showMainWindow() {
-        if mainWindowController == nil {
-            mainWindowController = MainWindowController()
-        }
-        mainWindowController?.showWindow(nil)
-        mainWindowController?.window?.makeKeyAndOrderFront(nil)
-        mainWindowController?.window?.center()
+        mainWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
