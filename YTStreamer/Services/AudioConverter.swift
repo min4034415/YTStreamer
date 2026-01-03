@@ -50,12 +50,20 @@ class AudioConverter {
         ]
         
         // Add metadata
+        // Add metadata
         if let title = title {
             arguments += ["-metadata", "title=\(title)"]
         }
         if let artist = artist {
             arguments += ["-metadata", "artist=\(artist)"]
+            // Use artist as album artist if available
+            arguments += ["-metadata", "album_artist=\(artist)"]
         }
+        
+        // Add Album and Year defaults
+        arguments += ["-metadata", "album=YT Streamer"]
+        let year = Calendar.current.component(.year, from: Date())
+        arguments += ["-metadata", "date=\(year)"]
         
         // Embed thumbnail as album art
         if hasThumbnail {
