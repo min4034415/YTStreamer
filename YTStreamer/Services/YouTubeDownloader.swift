@@ -35,10 +35,19 @@ class YouTubeDownloader {
                 return
             }
 
+            // Parse thumbnail - try simple field first, then array
+            var thumbnailURL = json["thumbnail"] as? String
+            if thumbnailURL == nil,
+               let thumbnails = json["thumbnails"] as? [[String: Any]],
+               let last = thumbnails.last, // Usually best quality
+               let url = last["url"] as? String {
+                thumbnailURL = url
+            }
+
             let metadata = TrackMetadata(
                 title: json["title"] as? String ?? "Unknown",
                 artist: json["uploader"] as? String ?? json["channel"] as? String,
-                thumbnailURL: json["thumbnail"] as? String,
+                thumbnailURL: thumbnailURL,
                 duration: json["duration"] as? TimeInterval,
                 videoURL: url
             )
@@ -82,10 +91,19 @@ class YouTubeDownloader {
                 let videoId = json["id"] as? String ?? ""
                 let videoURL = "https://www.youtube.com/watch?v=\(videoId)"
                 
+                // Parse thumbnail - try simple field first, then array
+                var thumbnailURL = json["thumbnail"] as? String
+                if thumbnailURL == nil,
+                   let thumbnails = json["thumbnails"] as? [[String: Any]],
+                   let last = thumbnails.last,
+                   let url = last["url"] as? String {
+                    thumbnailURL = url
+                }
+                
                 let metadata = TrackMetadata(
                     title: json["title"] as? String ?? "Unknown",
                     artist: json["uploader"] as? String ?? json["channel"] as? String,
-                    thumbnailURL: json["thumbnail"] as? String,
+                    thumbnailURL: thumbnailURL,
                     duration: json["duration"] as? TimeInterval,
                     videoURL: videoURL
                 )
