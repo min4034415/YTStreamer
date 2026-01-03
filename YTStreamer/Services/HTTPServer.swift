@@ -14,6 +14,10 @@ class HTTPServer {
     var trackTitle: String = "No track"
     var trackArtist: String = ""
     var thumbnailURL: String?
+    
+    // Remote control callbacks
+    var onSkip: (() -> Void)?
+    var onStop: (() -> Void)?
 
     /// Start the HTTP server
     func start(servingFile path: String, port: UInt16 = 8000, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -102,6 +106,14 @@ class HTTPServer {
                 self.sendAudioFile(over: connection)
             } else if request.contains("GET / ") || request.contains("GET /index") {
                 self.sendPlayerPage(over: connection)
+            } else if request.contains("GET /api/skip") {
+                print("🌐 API Skip requested")
+                DispatchQueue.main.async { self.onSkip?() }
+                self.sendOK(over: connection)
+            } else if request.contains("GET /api/stop") {
+                print("🌐 API Stop requested")
+                DispatchQueue.main.async { self.onStop?() }
+                self.sendOK(over: connection)
             } else if request.hasPrefix("GET") {
                 // Default to player page
                 self.sendPlayerPage(over: connection)
@@ -135,33 +147,64 @@ class HTTPServer {
                 .container {
                     text-align: center;
                     max-width: 400px;
+                    background: rgba(255, 255, 255, 0.05);
+                    padding: 30px;
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
                 }
                 .thumbnail {
-                    width: 280px;
-                    height: 280px;
+                    width: 250px;
+                    height: 250px;
                     object-fit: cover;
                     border-radius: 12px;
                     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
                     margin-bottom: 20px;
                 }
                 .title {
-                    font-size: 1.4em;
+                    font-size: 1.2em;
                     font-weight: bold;
                     margin: 10px 0;
                 }
                 .artist {
-                    font-size: 1em;
+                    font-size: 0.9em;
                     color: #aaa;
+                    margin-bottom: 25px;
+                }
+                .controls {
+                    display: flex;
+                    gap: 15px;
+                    justify-content: center;
                     margin-bottom: 20px;
+                }
+                button {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-size: 1em;
+                    transition: all 0.2s;
+                }
+                button:hover {
+                    background: rgba(255, 255, 255, 0.2);
+                }
+                button.skip {
+                    background: #007AFF;
+                    border: none;
+                }
+                button.stop {
+                    color: #ff453a;
+                }
+                .footer {
+                    margin-top: 20px;
+                    font-size: 0.7em;
+                    color: #666;
                 }
                 audio {
                     width: 100%;
-                    margin-top: 20px;
-                }
-                .footer {
-                    margin-top: 30px;
-                    font-size: 0.8em;
-                    color: #666;
+                    margin-top: 15px;
+                    opacity: 0.8;
                 }
             </style>
         </head>
@@ -170,15 +213,35 @@ class HTTPServer {
                 <img class="thumbnail" src="\(thumbnailURL ?? "")" onerror="this.style.display='none'">
                 <div class="title">\(trackTitle)</div>
                 <div class="artist">\(trackArtist)</div>
+                
+                <div class="controls">
+                    <button class="stop" onclick="api('stop')">⏹ Stop</button>
+                    <button class="skip" onclick="api('skip')">⏭ Skip</button>
+                </div>
+
                 <audio controls autoplay>
                     <source src="/stream.mp3" type="audio/mpeg">
-                    Your browser does not support audio.
                 </audio>
-                <div class="footer">Powered by YT Streamer</div>
+                
+                <div class="footer">YT Streamer • Refreshing in <span id="timer">30</span>s</div>
             </div>
             <script>
-                // Auto-refresh every 30 seconds to get new track
-                setTimeout(function() { location.reload(); }, 30000);
+                function api(action) {
+                    fetch('/api/' + action).then(() => {
+                        if(action === 'skip') {
+                            document.querySelector('.title').innerText = 'Skipping...';
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                    });
+                }
+                
+                // Countdown timer
+                let timeLeft = 30;
+                setInterval(() => {
+                    timeLeft--;
+                    document.getElementById('timer').innerText = timeLeft;
+                    if(timeLeft <= 0) location.reload();
+                }, 1000);
             </script>
         </body>
         </html>
@@ -223,6 +286,20 @@ class HTTPServer {
         response.append(fileData)
 
         connection.send(content: response, completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+    }
+
+    private func sendOK(over connection: NWConnection) {
+        let response = """
+        HTTP/1.1 200 OK\r
+        Content-Type: text/plain\r
+        Connection: close\r
+        \r
+        OK
+        """
+
+        connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
             connection.cancel()
         })
     }

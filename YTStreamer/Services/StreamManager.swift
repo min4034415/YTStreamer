@@ -251,6 +251,17 @@ class StreamManager: ObservableObject {
             server.trackArtist = track.artist ?? ""
             server.thumbnailURL = track.thumbnailURL
         }
+        
+        // Connect remote control callbacks
+        server.onSkip = { [weak self] in
+            print("⏭ Remote Skip command received")
+            self?.playNext()
+        }
+        
+        server.onStop = { [weak self] in
+            print("⏹ Remote Stop command received")
+            self?.stopServer()
+        }
 
         server.start(servingFile: filePath, port: 8000) { [weak self] result in
             guard let self = self else { return }
