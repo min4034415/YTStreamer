@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 /// Coordinates downloading, converting, and serving audio
 class StreamManager: ObservableObject {
@@ -144,6 +145,41 @@ class StreamManager: ObservableObject {
         }
     }
 
+
+    
+    // MARK: - Cache Management
+    
+    var cacheDirectory: URL {
+        BundledTools.shared.tempDirectory
+    }
+    
+    func openCacheDirectory() {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: cacheDirectory.path)
+    }
+    
+    func clearCache() {
+        let fileManager = FileManager.default
+        do {
+            let fileURLs = try fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil)
+            for fileURL in fileURLs {
+                try fileManager.removeItem(at: fileURL)
+            }
+            print("🧹 Cache cleared")
+            // Reset state if needed
+            DispatchQueue.main.async {
+                self.downloadProgress = 0
+                self.playbackProgress = 0
+            }
+        } catch {
+            print("❌ Error clearing cache: \(error)")
+        }
+    }
+    
+    // Helper for UI
+    func getServerIP() -> String? {
+        return networkInfo.localIPAddress
+    }
+
     /// Stop streaming and clean up
     func stopServer() {
         // Cancel streaming thread
@@ -232,6 +268,7 @@ class StreamManager: ObservableObject {
             inputPath: inputPath,
             title: track.title,
             artist: track.artist,
+            duration: track.duration,
             thumbnailURL: track.thumbnailURL,
             onProgress: { _ in
                 // Could show conversion progress
@@ -273,6 +310,14 @@ class StreamManager: ObservableObject {
         // Connect callbacks
         server.onSkip = { [weak self] in self?.playNext() }
         server.onStop = { [weak self] in self?.stopServer() }
+        
+        // Calculate file size for Content-Length header
+        if let attr = try? FileManager.default.attributesOfItem(atPath: filePath),
+           let size = attr[.size] as? UInt64 {
+            server.contentLength = size
+        } else {
+            server.contentLength = nil
+        }
         
         server.start(servingFile: filePath, port: 8000) { [weak self] result in
             guard let self = self else { return }
@@ -339,6 +384,9 @@ class StreamManager: ObservableObject {
                 print("⏹ Remote Stop command received")
                 self?.stopServer()
             }
+            
+            // Radio Mode = No Content Length (Infinite Stream)
+            server.contentLength = nil
             
             // Note: Empty filePath initially, we will stream data manually
             server.start(servingFile: "", port: 8000) { [weak self] result in

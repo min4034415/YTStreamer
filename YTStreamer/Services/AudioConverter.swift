@@ -13,6 +13,7 @@ class AudioConverter {
         inputPath: String,
         title: String? = nil,
         artist: String? = nil,
+        duration: Double? = nil,
         thumbnailURL: String? = nil,
         onProgress: @escaping (Double) -> Void,
         completion: @escaping (Result<String, Error>) -> Void
@@ -48,8 +49,7 @@ class AudioConverter {
             "-ab", "128k",           // 128 kbps bitrate
             "-ar", "44100"           // 44.1 kHz sample rate
         ]
-        
-        // Add metadata
+
         // Add metadata
         if let title = title {
             arguments += ["-metadata", "title=\(title)"]
@@ -59,9 +59,18 @@ class AudioConverter {
             // Use artist as album artist if available
             arguments += ["-metadata", "album_artist=\(artist)"]
         }
+        if let duration = duration {
+             // ID3v2.3 uses TLEN for duration in milliseconds
+             let ms = Int(duration * 1000)
+             arguments += ["-metadata", "TLEN=\(ms)"]
+        }
         
         // Force 128k bitrate for consistent streaming governor
         arguments += ["-b:a", "128k"]
+        
+        // Legacy Compatibility: Force ID3v2.3 (older iTunes prefers this over 2.4)
+        arguments += ["-id3v2_version", "3"]
+        arguments += ["-write_id3v1", "1"]
         
         // Add Album and Year defaults
         arguments += ["-metadata", "album=YT Streamer"]
@@ -74,7 +83,9 @@ class AudioConverter {
                 "-map", "0:a",           // Audio from first input
                 "-map", "1:v",           // Video (image) from second input
                 // Force MJPEG encoding for maximum compatibility with iTunes/ID3
-                "-c:v", "mjpeg",         
+                "-c:v", "mjpeg",
+                // Resize to max 500px width (maintaining aspect ratio) for G4 memory safety
+                "-vf", "scale='min(500,iw)':-1",
                 "-id3v2_version", "3",   // Use ID3v2.3 for compatibility
                 "-metadata:s:v", "title=Album cover",
                 "-metadata:s:v", "comment=Cover (front)",

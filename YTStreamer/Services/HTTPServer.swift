@@ -24,6 +24,9 @@ class HTTPServer {
     
     // Cached header (ID3 tags) for the current track
     var currentHeader: Data?
+    
+    // If set, serving a finite file (Single Track Mode)
+    var contentLength: UInt64?
 
     /// Broadcast audio data to all connected listeners
     func broadcast(_ data: Data) {
@@ -149,7 +152,15 @@ class HTTPServer {
     private func handleStreamRequest(over connection: NWConnection) {
         print("🎧 New listener connected!")
         
-        // Send HTTP headers for continuous stream
+        // Check mode
+        if self.contentLength != nil {
+            // FILE MODE (Single Track): Serve file directly
+            print("📂 Serving static file (Legacy Mode)")
+            sendAudioFile(over: connection)
+            return
+        }
+        
+        // STREAM MODE (Radio): Continuous stream headers
         let headers = """
         HTTP/1.1 200 OK\r
         Content-Type: audio/mpeg\r
@@ -157,20 +168,17 @@ class HTTPServer {
         Cache-Control: no-cache\r
         icy-name: YT Streamer\r
         \r
-        
         """
         
         connection.send(content: Data(headers.utf8), completion: .contentProcessed { [weak self] error in
             if error == nil {
-                // Send current ID3 header if available, so client gets metadata immediately
+                // In Radio Mode, we must send the cached ID3 header manually
                 if let header = self?.currentHeader {
-                    print("📡 Sending cached ID3 header to new listener")
+                    print("📡 Sending cached ID3 header to new listener (Radio Mode)")
                     connection.send(content: header, completion: .contentProcessed { _ in
-                         // Add to active listeners to receive broadcast data
                          self?.streamListeners.append(connection)
                     })
                 } else {
-                     // Add to active listeners directly
                      self?.streamListeners.append(connection)
                 }
             } else {
