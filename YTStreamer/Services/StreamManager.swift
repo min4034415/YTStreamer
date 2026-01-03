@@ -179,19 +179,25 @@ class StreamManager: ObservableObject {
 
             switch result {
             case .success:
-                self.status = .serving
-                self.streamURL = self.networkInfo.streamURL()
+                DispatchQueue.main.async {
+                    self.status = .serving
+                    self.streamURL = self.networkInfo.streamURL(port: self.server.port)
+                    self.objectWillChange.send()
 
-                // Update track status
-                if var track = self.currentTrack {
-                    track.status = .playing
-                    self.trackQueue.update(track)
-                    self.currentTrack = track
+                    // Update track status
+                    if var track = self.currentTrack {
+                        track.status = .playing
+                        self.trackQueue.update(track)
+                        self.currentTrack = track
+                    }
                 }
 
             case .failure(let error):
-                self.status = .error
-                self.errorMessage = "Failed to start server: \(error.localizedDescription)"
+                DispatchQueue.main.async {
+                    self.status = .error
+                    self.errorMessage = "Failed to start server: \(error.localizedDescription)"
+                    self.objectWillChange.send()
+                }
             }
         }
     }

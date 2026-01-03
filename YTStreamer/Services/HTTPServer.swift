@@ -13,8 +13,14 @@ class HTTPServer {
     /// Start the HTTP server
     func start(servingFile path: String, port: UInt16 = 8000, completion: @escaping (Result<Void, Error>) -> Void) {
         self.filePath = path
+        
+        // Try ports 8000-8010
+        tryStart(path: path, port: port, maxAttempts: 10, completion: completion)
+    }
+    
+    private func tryStart(path: String, port: UInt16, maxAttempts: Int, completion: @escaping (Result<Void, Error>) -> Void) {
         self.port = port
-
+        
         do {
             let parameters = NWParameters.tcp
             parameters.allowLocalEndpointReuse = true
@@ -25,13 +31,23 @@ class HTTPServer {
                 switch state {
                 case .ready:
                     self?.isRunning = true
+                    print("🌐 Server started on port \(port)")
                     DispatchQueue.main.async {
                         completion(.success(()))
                     }
                 case .failed(let error):
                     self?.isRunning = false
-                    DispatchQueue.main.async {
-                        completion(.failure(error))
+                    self?.listener?.cancel()
+                    self?.listener = nil
+                    
+                    // Try next port if address in use
+                    if maxAttempts > 1 {
+                        print("🌐 Port \(port) in use, trying \(port + 1)...")
+                        self?.tryStart(path: path, port: port + 1, maxAttempts: maxAttempts - 1, completion: completion)
+                    } else {
+                        DispatchQueue.main.async {
+                            completion(.failure(error))
+                        }
                     }
                 default:
                     break
@@ -45,7 +61,11 @@ class HTTPServer {
             listener?.start(queue: .global(qos: .userInitiated))
 
         } catch {
-            completion(.failure(error))
+            if maxAttempts > 1 {
+                tryStart(path: path, port: port + 1, maxAttempts: maxAttempts - 1, completion: completion)
+            } else {
+                completion(.failure(error))
+            }
         }
     }
 
