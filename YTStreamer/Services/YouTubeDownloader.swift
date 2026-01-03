@@ -54,7 +54,7 @@ class YouTubeDownloader {
         let arguments = [
             "--flat-playlist",
             "--dump-json",
-            "--playlist-end", "25",  // Limit to 25 videos
+            "--playlist-end", "10",  // Limit to 10 videos
             "--extractor-args", "youtube:player_client=ios",
             url
         ]
