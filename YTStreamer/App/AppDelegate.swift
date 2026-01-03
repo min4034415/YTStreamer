@@ -68,6 +68,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             mainWindowController = MainWindowController()
         }
         mainWindowController?.showWindow(nil)
+        mainWindowController?.window?.makeKeyAndOrderFront(nil)
+        mainWindowController?.window?.center()
         NSApp.activate(ignoringOtherApps: true)
     }
 
