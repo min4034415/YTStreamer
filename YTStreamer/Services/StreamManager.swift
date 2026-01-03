@@ -41,6 +41,17 @@ class StreamManager: ObservableObject {
     func addAndPlay(url: String) {
         print("📥 addAndPlay called with URL: \(url)")
         
+        // Check if it's a playlist
+        if url.contains("list=") {
+            addPlaylist(url: url)
+            return
+        }
+        
+        addSingleVideo(url: url)
+    }
+    
+    /// Add a single video to the queue
+    private func addSingleVideo(url: String) {
         var track = Track(youtubeURL: url)
         trackQueue.add(track)
 
@@ -77,6 +88,53 @@ class StreamManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.status = .error
                     self.errorMessage = error.localizedDescription
+                    self.objectWillChange.send()
+                }
+            }
+        }
+    }
+    
+    /// Add all videos from a playlist to the queue
+    private func addPlaylist(url: String) {
+        DispatchQueue.main.async {
+            self.status = .fetchingMetadata
+            self.errorMessage = nil
+            print("📋 Fetching playlist...")
+        }
+        
+        downloader.fetchPlaylistMetadata(for: url) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success(let metadataList):
+                print("📋 Adding \(metadataList.count) videos to queue")
+                
+                // Add all tracks to queue
+                for (index, metadata) in metadataList.enumerated() {
+                    guard let videoURL = metadata.videoURL else { continue }
+                    
+                    var track = Track(youtubeURL: videoURL)
+                    track.title = metadata.title
+                    track.artist = metadata.artist
+                    track.thumbnailURL = metadata.thumbnailURL
+                    track.duration = metadata.duration
+                    self.trackQueue.add(track)
+                    
+                    // Start playing the first track
+                    if index == 0 {
+                        DispatchQueue.main.async {
+                            self.currentTrack = track
+                            self.objectWillChange.send()
+                        }
+                        self.startDownload(track: track)
+                    }
+                }
+                
+            case .failure(let error):
+                print("📋 Playlist error: \(error)")
+                DispatchQueue.main.async {
+                    self.status = .error
+                    self.errorMessage = "Failed to load playlist: \(error.localizedDescription)"
                     self.objectWillChange.send()
                 }
             }

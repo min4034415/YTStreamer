@@ -2,30 +2,38 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var streamManager = StreamManager.shared
+    @StateObject private var trackQueue = TrackQueue.shared
     @State private var urlInput = ""
     
     var body: some View {
         NavigationSplitView {
             // Sidebar - Queue
             VStack(alignment: .leading) {
-                Text("Queue")
+                Text("Queue (\(trackQueue.tracks.count))")
                     .font(.headline)
                     .padding(.horizontal)
                     .padding(.top)
                 
-                if streamManager.queue.isEmpty {
+                if trackQueue.tracks.isEmpty {
                     Text("No tracks in queue")
                         .foregroundColor(.secondary)
                         .padding()
                 } else {
-                    List(streamManager.queue, id: \.id) { track in
-                        VStack(alignment: .leading) {
-                            Text(track.title)
-                                .font(.body)
-                                .lineLimit(1)
-                            Text(track.artist ?? "Unknown Artist")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    List(trackQueue.tracks) { track in
+                        HStack {
+                            if track.id == streamManager.currentTrack?.id {
+                                Image(systemName: "play.fill")
+                                    .foregroundColor(.blue)
+                            }
+                            VStack(alignment: .leading) {
+                                Text(track.title)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                    .fontWeight(track.id == streamManager.currentTrack?.id ? .bold : .regular)
+                                Text(track.artist ?? "Unknown Artist")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .padding(.vertical, 4)
                     }

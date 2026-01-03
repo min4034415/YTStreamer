@@ -39,11 +39,65 @@ class YouTubeDownloader {
                 title: json["title"] as? String ?? "Unknown",
                 artist: json["uploader"] as? String ?? json["channel"] as? String,
                 thumbnailURL: json["thumbnail"] as? String,
-                duration: json["duration"] as? TimeInterval
+                duration: json["duration"] as? TimeInterval,
+                videoURL: url
             )
 
             DispatchQueue.main.async {
                 completion(.success(metadata))
+            }
+        }
+    }
+    
+    /// Fetch all videos from a playlist
+    func fetchPlaylistMetadata(for url: String, completion: @escaping (Result<[TrackMetadata], Error>) -> Void) {
+        let arguments = [
+            "--flat-playlist",
+            "--dump-json",
+            "--extractor-args", "youtube:player_client=ios",
+            url
+        ]
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = ProcessRunner.run(self.tools.ytdlpPath, arguments: arguments)
+
+            if result.exitCode != 0 {
+                DispatchQueue.main.async {
+                    completion(.failure(DownloadError.metadataFailed(result.error)))
+                }
+                return
+            }
+
+            // Each line is a JSON object for one video
+            let lines = result.output.components(separatedBy: "\n").filter { !$0.isEmpty }
+            var tracks: [TrackMetadata] = []
+            
+            for line in lines {
+                guard let data = line.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    continue
+                }
+                
+                let videoId = json["id"] as? String ?? ""
+                let videoURL = "https://www.youtube.com/watch?v=\(videoId)"
+                
+                let metadata = TrackMetadata(
+                    title: json["title"] as? String ?? "Unknown",
+                    artist: json["uploader"] as? String ?? json["channel"] as? String,
+                    thumbnailURL: json["thumbnail"] as? String,
+                    duration: json["duration"] as? TimeInterval,
+                    videoURL: videoURL
+                )
+                tracks.append(metadata)
+            }
+
+            DispatchQueue.main.async {
+                if tracks.isEmpty {
+                    completion(.failure(DownloadError.parseError))
+                } else {
+                    print("📋 Found \(tracks.count) videos in playlist")
+                    completion(.success(tracks))
+                }
             }
         }
     }
@@ -107,6 +161,7 @@ struct TrackMetadata {
     let artist: String?
     let thumbnailURL: String?
     let duration: TimeInterval?
+    let videoURL: String?
 }
 
 enum DownloadError: LocalizedError {
