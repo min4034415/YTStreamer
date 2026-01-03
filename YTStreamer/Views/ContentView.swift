@@ -97,6 +97,27 @@ struct ContentView: View {
                             .padding(.horizontal)
                     }
                 } else {
+                    // Timeline for playback
+                    if streamManager.status == .serving {
+                        VStack(spacing: 4) {
+                            ProgressView(value: streamManager.playbackProgress)
+                                .frame(width: 300)
+                            
+                            HStack {
+                                Text("\(Int(streamManager.playbackProgress * 100))%")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if let duration = streamManager.currentTrack?.duration {
+                                    Text(formatDuration(duration))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .frame(width: 300)
+                        }
+                    }
+                    
                     Text(streamManager.status.rawValue)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -117,6 +138,16 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .padding(.top, 5)
                     
+                    // Dual Mode Toggle
+                    Toggle("Radio Mode", isOn: $streamManager.isRadioMode)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .help("Enable Continuous Radio Mode")
+                        .padding(.top, 5)
+                    Text(streamManager.isRadioMode ? "Radio Mode" : "Single Track")
+                        .font(.caption)
+                        .foregroundColor(streamManager.isRadioMode ? .green : .secondary)
+
                     if let port = streamManager.activePort {
                          Text("Port: \(port)")
                             .font(.caption)
@@ -181,6 +212,12 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+    
+    private func formatDuration(_ seconds: Double) -> String {
+        let minutes = Int(seconds) / 60
+        let seconds = Int(seconds) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
 

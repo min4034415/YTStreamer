@@ -21,6 +21,9 @@ class HTTPServer {
     
     // Active stream listeners
     private var streamListeners: [NWConnection] = []
+    
+    // Cached header (ID3 tags) for the current track
+    var currentHeader: Data?
 
     /// Broadcast audio data to all connected listeners
     func broadcast(_ data: Data) {
@@ -141,24 +144,35 @@ class HTTPServer {
         }
     }
     
+
+
     private func handleStreamRequest(over connection: NWConnection) {
         print("🎧 New listener connected!")
         
         // Send HTTP headers for continuous stream
-        // Note: No Content-Length implies continuous stream
         let headers = """
         HTTP/1.1 200 OK\r
         Content-Type: audio/mpeg\r
         Connection: keep-alive\r
         Cache-Control: no-cache\r
+        icy-name: YT Streamer\r
         \r
         
         """
         
         connection.send(content: Data(headers.utf8), completion: .contentProcessed { [weak self] error in
             if error == nil {
-                // Add to active listeners to receive broadcast data
-                self?.streamListeners.append(connection)
+                // Send current ID3 header if available, so client gets metadata immediately
+                if let header = self?.currentHeader {
+                    print("📡 Sending cached ID3 header to new listener")
+                    connection.send(content: header, completion: .contentProcessed { _ in
+                         // Add to active listeners to receive broadcast data
+                         self?.streamListeners.append(connection)
+                    })
+                } else {
+                     // Add to active listeners directly
+                     self?.streamListeners.append(connection)
+                }
             } else {
                 connection.cancel()
             }

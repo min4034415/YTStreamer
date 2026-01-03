@@ -18,6 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let streamManager = StreamManager.shared
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Force app to be a regular app (show in Dock) for Xcode debugging
+        NSApp.setActivationPolicy(.regular)
         setupMenuBar()
     }
     

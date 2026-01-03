@@ -7,12 +7,15 @@ class StreamManager: ObservableObject {
     static let shared = StreamManager()
 
     // MARK: - Published Properties
+    // MARK: - Published Properties
     @Published var currentTrack: Track?
     @Published var status: StreamStatus = .idle
     @Published var downloadProgress: Double = 0
+    @Published var playbackProgress: Double = 0 // New: Track playback progress
     @Published var streamURL: String?
     @Published var activePort: UInt16?
     @Published var errorMessage: String?
+    @Published var isRadioMode: Bool = true // New: Toggle for streaming mode
 
     // MARK: - Private Properties
     private let downloader = YouTubeDownloader.shared
@@ -34,8 +37,6 @@ class StreamManager: ObservableObject {
         case serving = "Streaming"
         case error = "Error"
     }
-
-    private init() {}
 
     // MARK: - Public Methods
 
@@ -144,11 +145,11 @@ class StreamManager: ObservableObject {
     }
 
     /// Stop streaming and clean up
-    /// Stop streaming and clean up
     func stopServer() {
         // Cancel streaming thread
         streamingWorkItem?.cancel()
         streamingWorkItem = nil
+        streamToken = nil // Stop streaming immediately
         
         currentProcess?.terminate()
         currentProcess = nil
@@ -175,6 +176,7 @@ class StreamManager: ObservableObject {
     private func startDownload(track: Track) {
         // Cleanup existing state
         autoPlayTimer?.invalidate()
+        streamToken = nil // Critical: Stop any active stream immediately to prevent overlap
         currentProcess?.terminate()
         currentProcess = nil
         
@@ -256,6 +258,75 @@ class StreamManager: ObservableObject {
     }
 
     private func startServer(filePath: String) {
+        if isRadioMode {
+            startServerRadioMode(filePath: filePath)
+        } else {
+            startServerSingleTrack(filePath: filePath)
+        }
+    }
+
+    // Legacy Mode: Restart server for every track (Forces artwork refresh)
+    private func startServerSingleTrack(filePath: String) {
+        // Always stop existing server first
+        stopServer()
+        
+        // Connect callbacks
+        server.onSkip = { [weak self] in self?.playNext() }
+        server.onStop = { [weak self] in self?.stopServer() }
+        
+        server.start(servingFile: filePath, port: 8000) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success:
+                DispatchQueue.main.async {
+                    self.status = .serving
+                    self.activePort = self.server.port
+                    self.streamURL = self.networkInfo.streamURL(port: self.server.port)
+                    
+                    // Update metadata
+                     if let track = self.currentTrack {
+                         self.server.trackTitle = track.title
+                         self.server.trackArtist = track.artist ?? ""
+                         self.server.thumbnailURL = track.thumbnailURL
+                     }
+                    
+                    self.objectWillChange.send()
+                    
+                    // Simulate progress since we can't track actual client playback easily in legacy mode
+                    // Just set it to full or pulse it? Or maybe just leave it at 0.
+                    // For now, let's leave it 0 or standard. 
+                }
+                
+                // For legacy mode, auto-advance is tricky because we don't know when the client finishes.
+                // We'll use the file duration to approximate.
+                 DispatchQueue.main.async {
+                     if let duration = self.currentTrack?.duration {
+                         self.scheduleAutoPlayLegacy(duration: duration)
+                     }
+                 }
+                 
+            case .failure(let error):
+                 DispatchQueue.main.async {
+                     self.status = .error
+                     self.errorMessage = "Server error: \(error.localizedDescription)"
+                 }
+            }
+        }
+    }
+    
+    // Legacy Autoplay Timer
+    private func scheduleAutoPlayLegacy(duration: Double) {
+        autoPlayTimer?.invalidate()
+        let buffer = 5.0 // Add 5s buffer
+        print("⏲ (Legacy) Scheduling next track in \(duration + buffer)s")
+        autoPlayTimer = Timer.scheduledTimer(withTimeInterval: duration + buffer, repeats: false) { [weak self] _ in
+             self?.playNext()
+        }
+    }
+
+    // Radio Mode: Continuous Stream
+    private func startServerRadioMode(filePath: String) {
         // If server is not running, start it
         if !server.isRunning {
              // Connect remote control callbacks
@@ -308,6 +379,7 @@ class StreamManager: ObservableObject {
     
     // Pipe audio file to server broadcast
     private var streamingWorkItem: DispatchWorkItem?
+    private var streamToken: UUID? // Unique token for the current streaming session
 
     private func streamAudioFile(at path: String) {
         // Cancel existing streaming work
@@ -315,6 +387,13 @@ class StreamManager: ObservableObject {
         
         // Cancel existing timer
         autoPlayTimer?.invalidate()
+        
+        // Generate new token for this session
+        let token = UUID()
+        self.streamToken = token
+        
+        // Reset progress
+        DispatchQueue.main.async { self.playbackProgress = 0 }
         
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
@@ -326,29 +405,59 @@ class StreamManager: ObservableObject {
             
             print("📡 Broadcasting \(fileData.count) bytes...")
             
-            // Chunk size for streaming (64KB)
-            let chunkSize = 65536
+            // Capture the header (ID3 tags) to send to new clients immediately
+            // ID3v2 header is at the start. 8KB should cover most cover art.
+            let headerSize = min(fileData.count, 8192)
+            let headerData = fileData.prefix(headerSize)
+            DispatchQueue.main.async {
+                self.server.currentHeader = headerData
+            }
+            
+            // Calculate bitrate: 128kbps ~= 16 KB/s
+            let chunkSize = 4096
             var offset = 0
+            let targetInterval = 0.23 
+            
+            let totalBytes = Double(fileData.count)
             
             while offset < fileData.count {
+                // Critical Fix: Check if this specific stream session is still valid
+                if self.streamToken != token {
+                    print("🛑 Streaming stopped (Token mismatch - new song started?)")
+                    return
+                }
+                
                 if self.streamingWorkItem?.isCancelled == true {
                     print("🛑 Streaming cancelled")
                     return
                 }
+                
+                let startTime = Date()
                 
                 let length = min(chunkSize, fileData.count - offset)
                 let chunk = fileData.subdata(in: offset..<offset + length)
                 self.server.broadcast(chunk)
                 offset += length
                 
-                // Throttle slightly to simulate real-time stream 
-                Thread.sleep(forTimeInterval: 0.01)
+                // Update Progress
+                let progress = Double(offset) / totalBytes
+                DispatchQueue.main.async { self.playbackProgress = progress }
+                
+                let elapsed = Date().timeIntervalSince(startTime)
+                let sleepTime = max(0, targetInterval - elapsed)
+                
+                if sleepTime > 0 {
+                    Thread.sleep(forTimeInterval: sleepTime)
+                }
             }
             
             print("✅ Broadcast complete")
             
             // Schedule next song with short buffer
              DispatchQueue.main.async {
+                 // Double check token again before auto-playing
+                 guard self.streamToken == token else { return }
+                 
                  let duration = 2.0 
                  print("⏲ Check next track in \(duration)s")
                  self.autoPlayTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in

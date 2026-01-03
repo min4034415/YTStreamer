@@ -60,6 +60,9 @@ class AudioConverter {
             arguments += ["-metadata", "album_artist=\(artist)"]
         }
         
+        // Force 128k bitrate for consistent streaming governor
+        arguments += ["-b:a", "128k"]
+        
         // Add Album and Year defaults
         arguments += ["-metadata", "album=YT Streamer"]
         let year = Calendar.current.component(.year, from: Date())
