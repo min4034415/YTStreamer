@@ -49,11 +49,12 @@ class YouTubeDownloader {
         }
     }
     
-    /// Fetch all videos from a playlist
+    /// Fetch all videos from a playlist (limited to 25)
     func fetchPlaylistMetadata(for url: String, completion: @escaping (Result<[TrackMetadata], Error>) -> Void) {
         let arguments = [
             "--flat-playlist",
             "--dump-json",
+            "--playlist-end", "25",  // Limit to 25 videos
             "--extractor-args", "youtube:player_client=ios",
             url
         ]
