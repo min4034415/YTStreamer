@@ -23,6 +23,7 @@ class StreamManager: ObservableObject {
     var queue: [Track] { trackQueue.tracks }
 
     private var currentProcess: Process?
+    private var autoPlayTimer: Timer?
 
     enum StreamStatus: String {
         case idle = "Ready"
@@ -231,6 +232,7 @@ class StreamManager: ObservableObject {
     private func startServer(filePath: String) {
         // Stop existing server if running
         server.stop()
+        autoPlayTimer?.invalidate()
 
         server.start(servingFile: filePath, port: 8000) { [weak self] result in
             guard let self = self else { return }
@@ -247,6 +249,15 @@ class StreamManager: ObservableObject {
                         track.status = .playing
                         self.trackQueue.update(track)
                         self.currentTrack = track
+                        
+                        // Schedule auto-play next track after duration
+                        if let duration = track.duration, duration > 0 {
+                            print("⏱️ Auto-play next in \(Int(duration)) seconds")
+                            self.autoPlayTimer = Timer.scheduledTimer(withTimeInterval: duration + 2, repeats: false) { [weak self] _ in
+                                print("⏱️ Auto-playing next track...")
+                                self?.playNext()
+                            }
+                        }
                     }
                 }
 
