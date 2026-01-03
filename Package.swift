@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "YTStreamer",
     platforms: [
-        .macOS(.v12)
+        .macOS(.v13)
     ],
     targets: [
         .executableTarget(
@@ -22,7 +22,8 @@ let package = Package(
                 "Utilities/ProcessRunner.swift",
                 "Utilities/BundledTools.swift",
                 "Views/MenuBarViewController.swift",
-                "Views/MainWindowController.swift"
+                "Views/MainWindowController.swift",
+                "Views/ContentView.swift"
             ]
         )
     ]

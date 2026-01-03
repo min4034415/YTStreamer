@@ -18,7 +18,9 @@ class StreamManager: ObservableObject {
     private let converter = AudioConverter.shared
     private let server = HTTPServer()
     private let networkInfo = NetworkInfo.shared
-    private let queue = TrackQueue.shared
+    private let trackQueue = TrackQueue.shared
+    
+    var queue: [Track] { trackQueue.tracks }
 
     private var currentProcess: Process?
 
@@ -38,7 +40,7 @@ class StreamManager: ObservableObject {
     /// Add a YouTube URL to the queue and start processing
     func addAndPlay(url: String) {
         var track = Track(youtubeURL: url)
-        queue.add(track)
+        trackQueue.add(track)
 
         status = .fetchingMetadata
         errorMessage = nil
@@ -53,7 +55,7 @@ class StreamManager: ObservableObject {
                 track.artist = metadata.artist
                 track.thumbnailURL = metadata.thumbnailURL
                 track.duration = metadata.duration
-                self.queue.update(track)
+                self.trackQueue.update(track)
                 self.currentTrack = track
                 self.startDownload(track: track)
 
@@ -75,13 +77,13 @@ class StreamManager: ObservableObject {
 
     /// Play next track in queue
     func playNext() {
-        guard let next = queue.next() else { return }
+        guard let next = trackQueue.next() else { return }
         startDownload(track: next)
     }
 
     /// Play previous track in queue
     func playPrevious() {
-        guard let prev = queue.previous() else { return }
+        guard let prev = trackQueue.previous() else { return }
         startDownload(track: prev)
     }
 
@@ -106,13 +108,13 @@ class StreamManager: ObservableObject {
                 case .success(let filePath):
                     updatedTrack.localFilePath = filePath
                     updatedTrack.status = .converting
-                    self.queue.update(updatedTrack)
+                    self.trackQueue.update(updatedTrack)
                     self.currentTrack = updatedTrack
                     self.startConversion(track: updatedTrack, inputPath: filePath)
 
                 case .failure(let error):
                     updatedTrack.status = .failed
-                    self.queue.update(updatedTrack)
+                    self.trackQueue.update(updatedTrack)
                     self.status = .error
                     self.errorMessage = error.localizedDescription
                 }
@@ -137,13 +139,13 @@ class StreamManager: ObservableObject {
                 case .success(let mp3Path):
                     updatedTrack.localFilePath = mp3Path
                     updatedTrack.status = .ready
-                    self.queue.update(updatedTrack)
+                    self.trackQueue.update(updatedTrack)
                     self.currentTrack = updatedTrack
                     self.startServer(filePath: mp3Path)
 
                 case .failure(let error):
                     updatedTrack.status = .failed
-                    self.queue.update(updatedTrack)
+                    self.trackQueue.update(updatedTrack)
                     self.status = .error
                     self.errorMessage = error.localizedDescription
                 }
@@ -166,7 +168,7 @@ class StreamManager: ObservableObject {
                 // Update track status
                 if var track = self.currentTrack {
                     track.status = .playing
-                    self.queue.update(track)
+                    self.trackQueue.update(track)
                     self.currentTrack = track
                 }
 
