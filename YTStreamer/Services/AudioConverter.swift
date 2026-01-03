@@ -70,7 +70,8 @@ class AudioConverter {
             arguments += [
                 "-map", "0:a",           // Audio from first input
                 "-map", "1:v",           // Video (image) from second input
-                "-c:v", "copy",          // Copy the image as-is
+                // Force MJPEG encoding for maximum compatibility with iTunes/ID3
+                "-c:v", "mjpeg",         
                 "-id3v2_version", "3",   // Use ID3v2.3 for compatibility
                 "-metadata:s:v", "title=Album cover",
                 "-metadata:s:v", "comment=Cover (front)"
