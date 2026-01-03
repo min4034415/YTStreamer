@@ -168,11 +168,21 @@ class StreamManager: ObservableObject {
     // MARK: - Private Methods
 
     private func startDownload(track: Track) {
+        // Cleanup existing state
+        autoPlayTimer?.invalidate()
+        currentProcess?.terminate()
+        currentProcess = nil
+        
         status = .downloading
         downloadProgress = 0
 
         var updatedTrack = track
         updatedTrack.status = .downloading
+        
+        // Update server metadata immediately so web UI shows "Loading..." or new track
+        server.trackTitle = track.title
+        server.trackArtist = track.artist ?? "Loading..."
+        server.thumbnailURL = track.thumbnailURL
         
         // Update UI immediately with new track info
         DispatchQueue.main.async {
