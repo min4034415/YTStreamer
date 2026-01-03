@@ -74,7 +74,8 @@ class AudioConverter {
                 "-c:v", "mjpeg",         
                 "-id3v2_version", "3",   // Use ID3v2.3 for compatibility
                 "-metadata:s:v", "title=Album cover",
-                "-metadata:s:v", "comment=Cover (front)"
+                "-metadata:s:v", "comment=Cover (front)",
+                "-disposition:v:0", "attached_pic"
             ]
         }
         

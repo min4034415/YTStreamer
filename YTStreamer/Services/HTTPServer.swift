@@ -18,6 +18,24 @@ class HTTPServer {
     // Remote control callbacks
     var onSkip: (() -> Void)?
     var onStop: (() -> Void)?
+    
+    // Active stream listeners
+    private var streamListeners: [NWConnection] = []
+
+    /// Broadcast audio data to all connected listeners
+    func broadcast(_ data: Data) {
+        // Filter out cancelled/failed connections
+        streamListeners = streamListeners.filter { $0.state != .cancelled && $0.state != .failed(.posix(.ECONNABORTED)) }
+        
+        for listener in streamListeners {
+            listener.send(content: data, completion: .contentProcessed { error in
+                if let error = error {
+                    print("⚠️ Send error: \(error)")
+                    listener.cancel()
+                }
+            })
+        }
+    }
 
     /// Start the HTTP server
     func start(servingFile path: String, port: UInt16 = 8000, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -103,7 +121,7 @@ class HTTPServer {
             
             // Parse request path
             if request.contains("GET /stream.mp3") || request.contains("GET /audio") {
-                self.sendAudioFile(over: connection)
+                self.handleStreamRequest(over: connection)
             } else if request.contains("GET / ") || request.contains("GET /index") {
                 self.sendPlayerPage(over: connection)
             } else if request.contains("GET /api/skip") {
@@ -121,6 +139,30 @@ class HTTPServer {
                 self.send404(over: connection)
             }
         }
+    }
+    
+    private func handleStreamRequest(over connection: NWConnection) {
+        print("🎧 New listener connected!")
+        
+        // Send HTTP headers for continuous stream
+        // Note: No Content-Length implies continuous stream
+        let headers = """
+        HTTP/1.1 200 OK\r
+        Content-Type: audio/mpeg\r
+        Connection: keep-alive\r
+        Cache-Control: no-cache\r
+        \r
+        
+        """
+        
+        connection.send(content: Data(headers.utf8), completion: .contentProcessed { [weak self] error in
+            if error == nil {
+                // Add to active listeners to receive broadcast data
+                self?.streamListeners.append(connection)
+            } else {
+                connection.cancel()
+            }
+        })
     }
     
     private func sendPlayerPage(over connection: NWConnection) {

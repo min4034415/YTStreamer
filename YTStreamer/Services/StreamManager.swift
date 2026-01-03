@@ -144,7 +144,12 @@ class StreamManager: ObservableObject {
     }
 
     /// Stop streaming and clean up
+    /// Stop streaming and clean up
     func stopServer() {
+        // Cancel streaming thread
+        streamingWorkItem?.cancel()
+        streamingWorkItem = nil
+        
         currentProcess?.terminate()
         currentProcess = nil
         server.stop()
@@ -251,63 +256,109 @@ class StreamManager: ObservableObject {
     }
 
     private func startServer(filePath: String) {
-        // Stop existing server if running
-        server.stop()
-        autoPlayTimer?.invalidate()
-        
-        // Set track metadata for web player
-        if let track = currentTrack {
-            server.trackTitle = track.title
-            server.trackArtist = track.artist ?? ""
-            server.thumbnailURL = track.thumbnailURL
-        }
-        
-        // Connect remote control callbacks
-        server.onSkip = { [weak self] in
-            print("⏭ Remote Skip command received")
-            self?.playNext()
-        }
-        
-        server.onStop = { [weak self] in
-            print("⏹ Remote Stop command received")
-            self?.stopServer()
-        }
-
-        server.start(servingFile: filePath, port: 8000) { [weak self] result in
-            guard let self = self else { return }
-
-            switch result {
-            case .success:
-                DispatchQueue.main.async {
-                    self.status = .serving
-                    self.activePort = self.server.port
-                    self.streamURL = self.networkInfo.streamURL(port: self.server.port)
-                    self.objectWillChange.send()
-
-                    // Update track status
-                    if var track = self.currentTrack {
-                        track.status = .playing
-                        self.trackQueue.update(track)
-                        self.currentTrack = track
+        // If server is not running, start it
+        if !server.isRunning {
+             // Connect remote control callbacks
+            server.onSkip = { [weak self] in
+                print("⏭ Remote Skip command received")
+                self?.playNext()
+            }
+            
+            server.onStop = { [weak self] in
+                print("⏹ Remote Stop command received")
+                self?.stopServer()
+            }
+            
+            // Note: Empty filePath initially, we will stream data manually
+            server.start(servingFile: "", port: 8000) { [weak self] result in
+                guard let self = self else { return }
+                
+                switch result {
+                case .success:
+                    DispatchQueue.main.async {
+                        self.status = .serving
+                        self.activePort = self.server.port
+                        self.streamURL = self.networkInfo.streamURL(port: self.server.port)
+                        self.objectWillChange.send()
                         
-                        // Schedule auto-play next track after duration
-                        if let duration = track.duration, duration > 0 {
-                            print("⏱️ Auto-play next in \(Int(duration)) seconds")
-                            self.autoPlayTimer = Timer.scheduledTimer(withTimeInterval: duration + 2, repeats: false) { [weak self] _ in
-                                print("⏱️ Auto-playing next track...")
-                                self?.playNext()
-                            }
-                        }
+                        // Start piping the file
+                        self.streamAudioFile(at: filePath)
+                    }
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        self.status = .error
+                        self.errorMessage = "Server error: \(error.localizedDescription)"
                     }
                 }
-
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    self.status = .error
-                    self.errorMessage = "Failed to start server: \(error.localizedDescription)"
-                    self.objectWillChange.send()
-                }
+            }
+        } else {
+            // Server already running, just start piping new file
+            DispatchQueue.main.async {
+                 self.status = .serving
+                 // Update metadata on running server
+                 if let track = self.currentTrack {
+                     self.server.trackTitle = track.title
+                     self.server.trackArtist = track.artist ?? ""
+                     self.server.thumbnailURL = track.thumbnailURL
+                 }
+                 self.streamAudioFile(at: filePath)
             }
         }
     }
+    
+    // Pipe audio file to server broadcast
+    private var streamingWorkItem: DispatchWorkItem?
+
+    private func streamAudioFile(at path: String) {
+        // Cancel existing streaming work
+        streamingWorkItem?.cancel()
+        
+        // Cancel existing timer
+        autoPlayTimer?.invalidate()
+        
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            
+            guard let fileData = FileManager.default.contents(atPath: path) else {
+                print("❌ Failed to read audio file")
+                return
+            }
+            
+            print("📡 Broadcasting \(fileData.count) bytes...")
+            
+            // Chunk size for streaming (64KB)
+            let chunkSize = 65536
+            var offset = 0
+            
+            while offset < fileData.count {
+                if self.streamingWorkItem?.isCancelled == true {
+                    print("🛑 Streaming cancelled")
+                    return
+                }
+                
+                let length = min(chunkSize, fileData.count - offset)
+                let chunk = fileData.subdata(in: offset..<offset + length)
+                self.server.broadcast(chunk)
+                offset += length
+                
+                // Throttle slightly to simulate real-time stream 
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+            
+            print("✅ Broadcast complete")
+            
+            // Schedule next song with short buffer
+             DispatchQueue.main.async {
+                 let duration = 2.0 
+                 print("⏲ Check next track in \(duration)s")
+                 self.autoPlayTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+                     self?.playNext()
+                 }
+             }
+        }
+        
+        streamingWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).async(execute: workItem)
+    }
+
 }
