@@ -233,6 +233,13 @@ class StreamManager: ObservableObject {
         // Stop existing server if running
         server.stop()
         autoPlayTimer?.invalidate()
+        
+        // Set track metadata for web player
+        if let track = currentTrack {
+            server.trackTitle = track.title
+            server.trackArtist = track.artist ?? ""
+            server.thumbnailURL = track.thumbnailURL
+        }
 
         server.start(servingFile: filePath, port: 8000) { [weak self] result in
             guard let self = self else { return }
