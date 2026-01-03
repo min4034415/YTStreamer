@@ -102,6 +102,29 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                 }
                 
+                // Controls
+                if streamManager.status == .serving || streamManager.status == .downloading || streamManager.status == .converting {
+                    HStack(spacing: 20) {
+                        Button(action: { streamManager.stopServer() }) {
+                            Label("Stop", systemImage: "stop.fill")
+                        }
+                        .tint(.red)
+                        
+                        Button(action: { streamManager.playNext() }) {
+                            Label("Skip", systemImage: "forward.end.fill")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 5)
+                    
+                    if let port = streamManager.activePort {
+                         Text("Port: \(port)")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundColor(.secondary)
+                     }
+                }
+                
                 // Stream URL Box - Always visible
                 VStack(spacing: 8) {
                     Text("Stream URL")

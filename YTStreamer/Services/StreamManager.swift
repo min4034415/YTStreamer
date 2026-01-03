@@ -11,6 +11,7 @@ class StreamManager: ObservableObject {
     @Published var status: StreamStatus = .idle
     @Published var downloadProgress: Double = 0
     @Published var streamURL: String?
+    @Published var activePort: UInt16?
     @Published var errorMessage: String?
 
     // MARK: - Private Properties
@@ -149,6 +150,7 @@ class StreamManager: ObservableObject {
         server.stop()
         status = .idle
         streamURL = nil
+        activePort = nil
     }
 
     /// Play next track in queue
@@ -205,6 +207,9 @@ class StreamManager: ObservableObject {
 
         currentProcess = converter.convertToMP3(
             inputPath: inputPath,
+            title: track.title,
+            artist: track.artist,
+            thumbnailURL: track.thumbnailURL,
             onProgress: { _ in
                 // Could show conversion progress
             },
@@ -248,6 +253,7 @@ class StreamManager: ObservableObject {
             case .success:
                 DispatchQueue.main.async {
                     self.status = .serving
+                    self.activePort = self.server.port
                     self.streamURL = self.networkInfo.streamURL(port: self.server.port)
                     self.objectWillChange.send()
 
